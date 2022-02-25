@@ -1,4 +1,4 @@
-Import('env', 'envCython', 'arch', 'QCOM_REPLAY')
+Import('env', 'envCython', 'arch', 'common')
 
 import shutil
 
@@ -9,15 +9,10 @@ messaging_dir = Dir('messaging')
 # Build cereal
 
 schema_files = ['log.capnp', 'car.capnp', 'legacy.capnp']
-env.Command(["gen/c/include/c++.capnp.h", "gen/c/include/java.capnp.h"], [], "mkdir -p " + gen_dir.path + "/c/include && touch $TARGETS")
+env.Command(["gen/c/include/c++.capnp.h"], [], "mkdir -p " + gen_dir.path + "/c/include && touch $TARGETS")
 env.Command([f'gen/cpp/{s}.c++' for s in schema_files] + [f'gen/cpp/{s}.h' for s in schema_files],
             schema_files,
             f"capnpc --src-prefix={cereal_dir.path} $SOURCES -o c++:{gen_dir.path}/cpp/")
-
-if shutil.which('capnpc-java'):
-  env.Command(['gen/java/Car.java', 'gen/java/Log.java'],
-              schema_files,
-              f"capnpc $SOURCES --src-prefix={cereal_dir.path} -o java:{gen_dir.path}/java/")
 
 # TODO: remove non shared cereal and messaging
 cereal_objects = env.SharedObject([f'gen/cpp/{s}.c++' for s in schema_files])
@@ -40,10 +35,10 @@ messaging_objects = env.SharedObject([
 messaging_lib = env.Library('messaging', messaging_objects)
 Depends('messaging/impl_zmq.cc', services_h)
 
-env.Program('messaging/bridge', ['messaging/bridge.cc'], LIBS=[messaging_lib, 'zmq'])
+env.Program('messaging/bridge', ['messaging/bridge.cc'], LIBS=[messaging_lib, 'zmq', common])
 Depends('messaging/bridge.cc', services_h)
 
-envCython.Program('messaging/messaging_pyx.so', 'messaging/messaging_pyx.pyx', LIBS=envCython["LIBS"]+[messaging_lib, "zmq"])
+envCython.Program('messaging/messaging_pyx.so', 'messaging/messaging_pyx.pyx', LIBS=envCython["LIBS"]+[messaging_lib, "zmq", common])
 
 
 # Build Vision IPC
@@ -54,7 +49,7 @@ vipc_sources = [
   'visionipc/visionbuf.cc',
 ]
 
-if arch in ["aarch64", "larch64"] and (not QCOM_REPLAY):
+if arch in ["aarch64", "larch64"]:
   vipc_sources += ['visionipc/visionbuf_ion.cc']
 else:
   vipc_sources += ['visionipc/visionbuf_cl.cc']
@@ -63,7 +58,9 @@ vipc_objects = env.SharedObject(vipc_sources)
 vipc = env.Library('visionipc', vipc_objects)
 
 
-libs = envCython["LIBS"]+["OpenCL", "zmq", vipc, messaging_lib]
+libs = envCython["LIBS"]+["OpenCL", "zmq", vipc, messaging_lib, common]
+if arch == "aarch64":
+  libs += ["adreno_utils"]
 if arch == "Darwin":
   del libs[libs.index('OpenCL')]
   envCython['FRAMEWORKS'] += ['OpenCL']
@@ -71,5 +68,5 @@ envCython.Program('visionipc/visionipc_pyx.so', 'visionipc/visionipc_pyx.pyx', L
 
 
 if GetOption('test'):
-  env.Program('messaging/test_runner', ['messaging/test_runner.cc', 'messaging/msgq_tests.cc'], LIBS=[messaging_lib])
-  env.Program('visionipc/test_runner', ['visionipc/test_runner.cc', 'visionipc/visionipc_tests.cc'], LIBS=[vipc, messaging_lib, 'zmq', 'pthread', 'OpenCL'])
+  env.Program('messaging/test_runner', ['messaging/test_runner.cc', 'messaging/msgq_tests.cc'], LIBS=[messaging_lib, common])
+  env.Program('visionipc/test_runner', ['visionipc/test_runner.cc', 'visionipc/visionipc_tests.cc'], LIBS=[vipc, messaging_lib, 'zmq', 'pthread', 'OpenCL', common])

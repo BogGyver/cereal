@@ -3,9 +3,9 @@
 #include <string>
 #include <unistd.h>
 
-#include "messaging.hpp"
-#include "visionipc.h"
-#include "visionbuf.h"
+#include "messaging/messaging.h"
+#include "visionipc/visionipc.h"
+#include "visionipc/visionbuf.h"
 
 class VisionIpcClient {
 private:
@@ -29,4 +29,5 @@ public:
   ~VisionIpcClient();
   VisionBuf * recv(VisionIpcBufExtra * extra=nullptr, const int timeout_ms=100);
   bool connect(bool blocking=true);
+  bool is_connected() { return connected; }
 };

@@ -21,7 +21,7 @@
 
 #include <stdio.h>
 
-#include "msgq.hpp"
+#include "msgq.h"
 
 void sigusr2_handler(int signal) {
   assert(signal == SIGUSR2);
@@ -91,7 +91,7 @@ int msgq_new_queue(msgq_queue_t * q, const char * path, size_t size){
   strcpy(full_path, prefix);
   strcat(full_path, path);
 
-  auto fd = open(full_path, O_RDWR | O_CREAT, 0777);
+  auto fd = open(full_path, O_RDWR | O_CREAT, 0664);
   if (fd < 0) {
     std::cout << "Warning, could not open: " << full_path << std::endl;
     delete[] full_path;
@@ -460,5 +460,5 @@ bool msgq_all_readers_updated(msgq_queue_t *q) {
       return false;
     }
   }
-  return true;
+  return num_readers > 0;
 }

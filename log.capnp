@@ -1,10 +1,6 @@
 using Cxx = import "./include/c++.capnp";
 $Cxx.namespace("cereal");
 
-using Java = import "./include/java.capnp";
-$Java.package("ai.comma.openpilot.cereal");
-$Java.outerClassname("Log");
-
 using Car = import "car.capnp";
 using Legacy = import "legacy.capnp";
 
@@ -23,8 +19,8 @@ struct Map(Key, Value) {
 struct InitData {
   kernelArgs @0 :List(Text);
   kernelVersion @15 :Text;
+  osVersion @18 :Text;
 
-  gctx @1 :Text;
   dongleId @2 :Text;
 
   deviceType @3 :DeviceType;
@@ -58,6 +54,7 @@ struct InitData {
   }
 
   # ***** deprecated stuff *****
+  gctxDEPRECATED @1 :Text;
   androidBuildInfo @5 :AndroidBuildInfo;
   androidSensorsDEPRECATED @6 :List(AndroidSensor);
   chffrAndroidExtraDEPRECATED @7 :ChffrAndroidExtra;
@@ -122,26 +119,37 @@ struct InitData {
 struct FrameData {
   frameId @0 :UInt32;
   encodeId @1 :UInt32; # DEPRECATED
-  timestampEof @2 :UInt64;
+
+  frameType @7 :FrameType;
   frameLength @3 :Int32;
+
+  # Timestamps
+  timestampEof @2 :UInt64;
+  timestampSof @8 :UInt64;
+
+  # Exposure
   integLines @4 :Int32;
-  globalGain @5 :Int32;
+  highConversionGain @20 :Bool;
+  gain @15 :Float32; # This includes highConversionGain if enabled
+  measuredGreyFraction @21 :Float32;
+  targetGreyFraction @22 :Float32;
+
+  # Focus
   lensPos @11 :Int32;
   lensSag @12 :Float32;
   lensErr @13 :Float32;
   lensTruePos @14 :Float32;
-  image @6 :Data;
-  gainFrac @15 :Float32;
   focusVal @16 :List(Int16);
   focusConf @17 :List(UInt8);
   sharpnessScore @18 :List(UInt16);
   recoverState @19 :Int32;
 
-  frameType @7 :FrameType;
-  timestampSof @8 :UInt64;
   transform @10 :List(Float32);
 
   androidCaptureResult @9 :AndroidCaptureResult;
+
+  image @6 :Data;
+  globalGainDEPRECATED @5 :Int32;
 
   enum FrameType {
     unknown @0;
@@ -211,6 +219,8 @@ struct SensorEventData {
     mmc3416x @7;  # magnetometer (c2)
     bmx055 @8;
     rpr0521 @9;
+    lsm6ds3trc @10;
+    mmc5603nj @11;
   }
 }
 
@@ -275,34 +285,48 @@ struct CanData {
 }
 
 struct DeviceState @0xa4d8b5af2aa492eb {
-  freeSpacePercent @7 :Float32;
-  memoryUsagePercent @19 :Int8;
-  cpuUsagePercent @20 :Int8;
   usbOnline @12 :Bool;
   networkType @22 :NetworkType;
-  offroadPowerUsageUwh @23 :UInt32;
+  networkInfo @31 :NetworkInfo;
   networkStrength @24 :NetworkStrength;
-  carBatteryCapacityUwh @25 :UInt32;
+  lastAthenaPingTime @32 :UInt64;
 
-  fanSpeedPercentDesired @10 :UInt16;
   started @11 :Bool;
   startedMonoTime @13 :UInt64;
 
+  # system utilization
+  freeSpacePercent @7 :Float32;
+  memoryUsagePercent @19 :Int8;
+  gpuUsagePercent @33 :Int8;
+  cpuUsagePercent @34 :List(Int8);  # per-core cpu usage
+
   # power
   batteryPercent @8 :Int16;
-  batteryStatus @9 :Text;
   batteryCurrent @15 :Int32;
-  batteryVoltage @16 :Int32;
   chargingError @17 :Bool;
   chargingDisabled @18 :Bool;
+  offroadPowerUsageUwh @23 :UInt32;
+  carBatteryCapacityUwh @25 :UInt32;
+  powerDrawW @40 :Float32;
 
   # device thermals
   cpuTempC @26 :List(Float32);
   gpuTempC @27 :List(Float32);
   memoryTempC @28 :Float32;
-  batteryTempC @29 :Float32;
   ambientTempC @30 :Float32;
+  nvmeTempC @35 :List(Float32);
+  modemTempC @36 :List(Float32);
+  pmicTempC @39 :List(Float32);
+  thermalZones @38 :List(ThermalZone);
   thermalStatus @14 :ThermalStatus;
+
+  fanSpeedPercentDesired @10 :UInt16;
+  screenBrightnessPercent @37 :Int8;
+
+  struct ThermalZone {
+    name @0 :Text;
+    temp @1 :Float32;
+  }
 
   enum ThermalStatus {
     green @0;
@@ -318,6 +342,7 @@ struct DeviceState @0xa4d8b5af2aa492eb {
     cell3G @3;
     cell4G @4;
     cell5G @5;
+    ethernet @6;
   }
 
   enum NetworkStrength {
@@ -326,6 +351,15 @@ struct DeviceState @0xa4d8b5af2aa492eb {
     moderate @2;
     good @3;
     great @4;
+  }
+
+  struct NetworkInfo {
+    technology @0 :Text;
+    operator @1 :Text;
+    band @2 :Text;
+    channel @3 :UInt16;
+    extra @4 :Text;
+    state @5 :Text;
   }
 
   # deprecated
@@ -337,30 +371,32 @@ struct DeviceState @0xa4d8b5af2aa492eb {
   gpuDEPRECATED @5 :UInt16;
   batDEPRECATED @6 :UInt32;
   pa0DEPRECATED @21 :UInt16;
+  cpuUsagePercentDEPRECATED @20 :Int8;
+  batteryStatusDEPRECATED @9 :Text;
+  batteryVoltageDEPRECATED @16 :Int32;
+  batteryTempCDEPRECATED @29 :Float32;
 }
 
 struct PandaState @0xa7649e2575e4591e {
-  # from can health
-  voltage @0 :UInt32;
-  current @1 :UInt32;
   ignitionLine @2 :Bool;
   controlsAllowed @3 :Bool;
   gasInterceptorDetected @4 :Bool;
-  hasGps @6 :Bool;
   canSendErrs @7 :UInt32;
   canFwdErrs @8 :UInt32;
   canRxErrs @19 :UInt32;
   gmlanSendErrs @9 :UInt32;
   pandaType @10 :PandaType;
-  fanSpeedRpm @11 :UInt16;
-  usbPowerMode @12 :UsbPowerMode;
   ignitionCan @13 :Bool;
   safetyModel @14 :Car.CarParams.SafetyModel;
   safetyParam @20 :Int16;
+  unsafeMode @23 :Int16;
   faultStatus @15 :FaultStatus;
   powerSaveEnabled @16 :Bool;
   uptime @17 :UInt32;
   faults @18 :List(FaultType);
+  harnessStatus @21 :HarnessStatus;
+  heartbeatLost @22 :Bool;
+  blockedCnt @24 :UInt32;
 
   enum FaultStatus {
     none @0;
@@ -390,7 +426,7 @@ struct PandaState @0xa7649e2575e4591e {
     registerDivergent @18;
     interruptRateKlineInit @19;
     interruptRateClockSource @20;
-    interruptRateTim9 @21;
+    interruptRateTick @21;
     # Update max fault type in boardd when adding faults
   }
 
@@ -402,16 +438,36 @@ struct PandaState @0xa7649e2575e4591e {
     pedal @4;
     uno @5;
     dos @6;
+    redPanda @7;
   }
 
-  enum UsbPowerMode {
+  enum HarnessStatus {
+    notConnected @0;
+    normal @1;
+    flipped @2;
+  }
+
+  startedSignalDetectedDEPRECATED @5 :Bool;
+  voltageDEPRECATED @0 :UInt32;
+  currentDEPRECATED @1 :UInt32;
+  hasGpsDEPRECATED @6 :Bool;
+  fanSpeedRpmDEPRECATED @11 :UInt16;
+  usbPowerModeDEPRECATED @12 :PeripheralState.UsbPowerMode;
+}
+
+struct PeripheralState {
+  pandaType @0 :PandaState.PandaType;
+  voltage @1 :UInt32;
+  current @2 :UInt32;
+  fanSpeedRpm @3 :UInt16;
+  usbPowerMode @4 :UsbPowerMode;
+
+  enum UsbPowerMode @0xa8883583b32c9877 {
     none @0;
     client @1;
     cdp @2;
     dcp @3;
   }
-
-  startedSignalDetectedDEPRECATED @5 :Bool;
 }
 
 struct RadarState @0x9a185389d6fdd05f {
@@ -493,7 +549,7 @@ struct ControlsState @0x97ff69c53601abf1 {
   enabled @19 :Bool;
   active @36 :Bool;
 
-  longControlState @30 :LongControlState;
+  longControlState @30 :Car.CarControl.Actuators.LongControlState;
   vPid @2 :Float32;
   vTargetLead @3 :Float32;
   vCruise @22 :Float32;
@@ -501,7 +557,6 @@ struct ControlsState @0x97ff69c53601abf1 {
   uiAccelCmd @5 :Float32;
   ufAccelCmd @33 :Float32;
   aTarget @35 :Float32;
-  steeringAngleDesiredDeg @29 :Float32;
   curvature @37 :Float32;  # path curvature from vehicle model
   forceDecel @51 :Bool;
 
@@ -523,6 +578,7 @@ struct ControlsState @0x97ff69c53601abf1 {
     pidState @53 :LateralPIDState;
     lqrState @55 :LateralLQRState;
     angleState @58 :LateralAngleState;
+    debugState @59 :LateralDebugState;
   }
 
   enum OpenpilotState @0xdbe58b96d2d1ac61 {
@@ -530,13 +586,6 @@ struct ControlsState @0x97ff69c53601abf1 {
     preEnabled @1;
     enabled @2;
     softDisabling @3;
-  }
-
-  enum LongControlState {
-    off @0;
-    pid @1;
-    stopping @2;
-    starting @3;
   }
 
   enum AlertStatus {
@@ -564,6 +613,8 @@ struct ControlsState @0x97ff69c53601abf1 {
     delta @8 :Float32;
     output @9 :Float32;
     saturated @10 :Bool;
+    steeringAngleDesiredDeg @11 :Float32;
+    steeringRateDesiredDeg @12 :Float32;
   }
 
   struct LateralPIDState {
@@ -576,6 +627,7 @@ struct ControlsState @0x97ff69c53601abf1 {
     f @6 :Float32;
     output @7 :Float32;
     saturated @8 :Bool;
+    steeringAngleDesiredDeg @9 :Float32;
    }
 
   struct LateralLQRState {
@@ -585,9 +637,18 @@ struct ControlsState @0x97ff69c53601abf1 {
     output @3 :Float32;
     lqrOutput @4 :Float32;
     saturated @5 :Bool;
+    steeringAngleDesiredDeg @6 :Float32;
   }
 
   struct LateralAngleState {
+    active @0 :Bool;
+    steeringAngleDeg @1 :Float32;
+    output @2 :Float32;
+    saturated @3 :Bool;
+    steeringAngleDesiredDeg @4 :Float32;
+  }
+
+  struct LateralDebugState {
     active @0 :Bool;
     steeringAngleDeg @1 :Float32;
     output @2 :Float32;
@@ -622,6 +683,7 @@ struct ControlsState @0x97ff69c53601abf1 {
   mapValidDEPRECATED @49 :Bool;
   jerkFactorDEPRECATED @12 :Float32;
   steerOverrideDEPRECATED @20 :Bool;
+  steeringAngleDesiredDegDEPRECATED @29 :Float32;
 }
 
 struct ModelDataV2 {
@@ -638,6 +700,7 @@ struct ModelDataV2 {
   orientation @5 :XYZTData;
   velocity @6 :XYZTData;
   orientationRate @7 :XYZTData;
+  acceleration @19 :XYZTData;
 
   # prediction lanelines and road edges
   laneLines @8 :List(XYZTData);
@@ -648,6 +711,7 @@ struct ModelDataV2 {
 
   # predicted lead cars
   leads @11 :List(LeadDataV2);
+  leadsV3 @18 :List(LeadDataV3);
 
   meta @12 :MetaData;
 
@@ -673,13 +737,46 @@ struct ModelDataV2 {
     xyvaStd @3 :List(Float32);
   }
 
+  struct LeadDataV3 {
+    prob @0 :Float32; # probability that car is your lead at time t
+    probTime @1 :Float32;
+    t @2 :List(Float32);
+
+    # x and y are relative position in device frame
+    # v absolute norm speed
+    # a is derivative of v
+    x @3 :List(Float32);
+    xStd @4 :List(Float32);
+    y @5 :List(Float32);
+    yStd @6 :List(Float32);
+    v @7 :List(Float32);
+    vStd @8 :List(Float32);
+    a @9 :List(Float32);
+    aStd @10 :List(Float32);
+  }
+
+
   struct MetaData {
     engagedProb @0 :Float32;
     desirePrediction @1 :List(Float32);
-    brakeDisengageProb @2 :Float32;
-    gasDisengageProb @3 :Float32;
-    steerOverrideProb @4 :Float32;
     desireState @5 :List(Float32);
+    disengagePredictions @6 :DisengagePredictions;
+    hardBrakePredicted @7 :Bool;
+
+    # deprecated
+    brakeDisengageProbDEPRECATED @2 :Float32;
+    gasDisengageProbDEPRECATED @3 :Float32;
+    steerOverrideProbDEPRECATED @4 :Float32;
+  }
+
+  struct DisengagePredictions {
+    t @0 :List(Float32);
+    brakeDisengageProbs @1 :List(Float32);
+    gasDisengageProbs @2 :List(Float32);
+    steerOverrideProbs @3 :List(Float32);
+    brake3MetersPerSecondSquaredProbs @4 :List(Float32);
+    brake4MetersPerSecondSquaredProbs @5 :List(Float32);
+    brake5MetersPerSecondSquaredProbs @6 :List(Float32);
   }
 }
 
@@ -719,34 +816,37 @@ struct AndroidLogEntry {
 }
 
 struct LongitudinalPlan @0xe00b5b3eba12876c {
-  mdMonoTime @9 :UInt64;
-  radarStateMonoTime @10 :UInt64;
-
-  vCruise @16 :Float32;
-  aCruise @17 :Float32;
-  vTarget @3 :Float32;
-  vTargetFuture @14 :Float32;
-  vMax @20 :Float32;
-  aTarget @18 :Float32;
-
-  vStart @26 :Float32;
-  aStart @27 :Float32;
-
+  modelMonoTime @9 :UInt64;
   hasLead @7 :Bool;
   fcw @8 :Bool;
   longitudinalPlanSource @15 :LongitudinalPlanSource;
-
   processingDelay @29 :Float32;
+
+  # desired speed/accel/jerk over next 2.5s
+  accels @32 :List(Float32);
+  speeds @33 :List(Float32);
+  jerks @34 :List(Float32);
+
+  solverExecutionTime @35 :Float32;
 
   enum LongitudinalPlanSource {
     cruise @0;
-    mpc1 @1;
-    mpc2 @2;
-    mpc3 @3;
-    model @4;
+    lead0 @1;
+    lead1 @2;
+    lead2 @3;
+    e2e @4;
   }
 
   # deprecated
+  vCruiseDEPRECATED @16 :Float32;
+  aCruiseDEPRECATED @17 :Float32;
+  vTargetDEPRECATED @3 :Float32;
+  vTargetFutureDEPRECATED @14 :Float32;
+  aTargetDEPRECATED @18 :Float32;
+  vStartDEPRECATED @26 :Float32;
+  aStartDEPRECATED @27 :Float32;
+  vMaxDEPRECATED @20 :Float32;
+  radarStateMonoTimeDEPRECATED @10 :UInt64;
   jerkFactorDEPRECATED @6 :Float32;
   hasLeftLaneDEPRECATED @23 :Bool;
   hasRightLaneDEPRECATED @24 :Bool;
@@ -783,12 +883,14 @@ struct LateralPlan @0xe1e9318e2ae8b51e {
   desire @17 :Desire;
   laneChangeState @18 :LaneChangeState;
   laneChangeDirection @19 :LaneChangeDirection;
+  useLaneLines @29 :Bool;
 
-  # curvature is in rad/m
-  curvature @22 :Float32;
-  curvatureRate @23 :Float32;
-  rawCurvature @24 :Float32;
-  rawCurvatureRate @25 :Float32;
+  # desired curvatures over next 2.5s in rad/m
+  psis @26 :List(Float32);
+  curvatures @27 :List(Float32);
+  curvatureRates @28 :List(Float32);
+
+  solverExecutionTime @30 :Float32;
 
   enum Desire {
     none @0;
@@ -814,6 +916,10 @@ struct LateralPlan @0xe1e9318e2ae8b51e {
   }
 
   # deprecated
+  curvatureDEPRECATED @22 :Float32;
+  curvatureRateDEPRECATED @23 :Float32;
+  rawCurvatureDEPRECATED @24 :Float32;
+  rawCurvatureRateDEPRECATED @25 :Float32;
   cProbDEPRECATED @3 :Float32;
   dPolyDEPRECATED @1 :List(Float32);
   cPolyDEPRECATED @2 :List(Float32);
@@ -850,7 +956,7 @@ struct LiveLocationKalman {
   angularVelocityDevice @8 : Measurement;
 
   # orientationNEDCalibrated transforms to rot matrix: NED_from_calibrated
-  orientationNEDCalibrated @9 : Measurement;
+  calibratedOrientationNED @9 : Measurement;
 
   # Calibrated frame is simply device frame
   # aligned with the vehicle
@@ -867,6 +973,8 @@ struct LiveLocationKalman {
   gpsOK @19 :Bool = true;
   sensorsOK @21 :Bool = true;
   deviceStable @22 :Bool = true;
+  timeSinceReset @23 :Float64;
+  excessiveResets @24 :Bool;
 
   enum Status {
     uninitialized @0;
@@ -1070,6 +1178,7 @@ struct UbloxGnss {
     aStatus @2 :AntennaSupervisorState;
     aPower @3 :AntennaPowerStatus;
     jamInd @4 :UInt8;
+    flags @5 :UInt8;
 
     enum AntennaSupervisorState {
       init @0;
@@ -1163,6 +1272,9 @@ struct DriverState {
   partialFace @18 :Float32;
   distractedPose @19 :Float32;
   distractedEyes @20 :Float32;
+  eyesOnRoad @21 :Float32;
+  phoneUse @22 :Float32;
+  occludedProb @23 :Float32;
 
   irPwrDEPRECATED @10 :Float32;
   descriptorDEPRECATED @1 :List(Float32);
@@ -1192,9 +1304,12 @@ struct DriverMonitoringState @0xb83cda094a1da284 {
 
 struct Boot {
   wallTimeNanos @0 :UInt64;
-  lastKmsg @1 :Data;
-  lastPmsg @2 :Data;
+  pstore @4 :Map(Text, Data);
+  commands @5 :Map(Text, Data);
   launchLog @3 :Text;
+
+  lastKmsgDEPRECATED @1 :Data;
+  lastPmsgDEPRECATED @2 :Data;
 }
 
 struct LiveParametersData {
@@ -1208,6 +1323,11 @@ struct LiveParametersData {
   yawRate @7 :Float32;
   posenetSpeed @8 :Float32;
   posenetValid @9 :Bool;
+  angleOffsetFastStd @10 :Float32;
+  angleOffsetAverageStd @11 :Float32;
+  stiffnessFactorStd @12 :Float32;
+  steerRatioStd @13 :Float32;
+  roll @14 :Float32;
 }
 
 struct LiveMapDataDEPRECATED {
@@ -1247,6 +1367,7 @@ struct Sentinel {
     startOfRoute @3;
   }
   type @0 :SentinelType;
+  signal @1 :Int32;
 }
 
 struct ManagerState {
@@ -1256,7 +1377,58 @@ struct ManagerState {
     name @0 :Text;
     pid @1 :Int32;
     running @2 :Bool;
+    shouldBeRunning @4 :Bool;
     exitCode @3 :Int32;
+  }
+}
+
+struct UploaderState {
+  immediateQueueSize @0 :UInt32;
+  immediateQueueCount @1 :UInt32;
+  rawQueueSize @2 :UInt32;
+  rawQueueCount @3 :UInt32;
+
+  # stats for last successfully uploaded file
+  lastTime @4 :Float32;  # s
+  lastSpeed @5 :Float32; # MB/s
+  lastFilename @6 :Text;
+}
+
+struct NavInstruction {
+  maneuverPrimaryText @0 :Text;
+  maneuverSecondaryText @1 :Text;
+  maneuverDistance @2 :Float32;  # m
+  maneuverType @3 :Text; # TODO: Make Enum
+  maneuverModifier @4 :Text; # TODO: Make Enum
+
+  distanceRemaining @5 :Float32; # m
+  timeRemaining @6 :Float32; # s
+  timeRemainingTypical @7 :Float32; # s
+
+  lanes @8 :List(Lane);
+  showFull @9 :Bool;
+
+  struct Lane {
+    directions @0 :List(Direction);
+    active @1 :Bool;
+    activeDirection @2 :Direction;
+  }
+
+  enum Direction {
+    none @0;
+    left @1;
+    right @2;
+    straight @3;
+  }
+
+}
+
+struct NavRoute {
+  coordinates @0 :List(Coordinate);
+
+  struct Coordinate {
+    latitude @0 :Float32;
+    longitude @1 :Float32;
   }
 }
 
@@ -1277,7 +1449,8 @@ struct Event {
     can @5 :List(CanData);
     controlsState @7 :ControlsState;
     sensorEvents @11 :List(SensorEventData);
-    pandaState @12 :PandaState;
+    pandaStates @81 :List(PandaState);
+    peripheralState @80 :PeripheralState;
     radarState @13 :RadarState;
     liveTracks @16 :List(LiveTracks);
     sendcan @17 :List(CanData);
@@ -1287,8 +1460,6 @@ struct Event {
     longitudinalPlan @24 :LongitudinalPlan;
     lateralPlan @64 :LateralPlan;
     ubloxGnss @34 :UbloxGnss;
-    liveMpc @36 :LiveMpcData;
-    liveLongitudinalMpc @37 :LiveLongitudinalMpcData;
     ubloxRaw @39 :Data;
     gpsLocationExternal @48 :GpsLocationData;
     driverState @59 :DriverState;
@@ -1312,17 +1483,25 @@ struct Event {
     # systems stuff
     androidLog @20 :AndroidLogEntry;
     managerState @78 :ManagerState;
+    uploaderState @79 :UploaderState;
     procLog @33 :ProcLog;
     clocks @35 :Clocks;
     deviceState @6 :DeviceState;
     logMessage @18 :Text;
+    errorLogMessage @85 :Text;
 
+    # navigation
+    navInstruction @82 :NavInstruction;
+    navRoute @83 :NavRoute;
+    navThumbnail @84: Thumbnail;
 
     # *********** debug ***********
     testJoystick @52 :Joystick;
 
     # *********** legacy + deprecated ***********
     model @9 :Legacy.ModelData; # TODO: rename modelV2 and mark this as deprecated
+    liveMpcDEPRECATED @36 :LiveMpcData;
+    liveLongitudinalMpcDEPRECATED @37 :LiveLongitudinalMpcData;
     liveLocationKalmanDEPRECATED @51 :Legacy.LiveLocationData;
     orbslamCorrectionDEPRECATED @45 :Legacy.OrbslamCorrection;
     liveUIDEPRECATED @14 :Legacy.LiveUI;
@@ -1356,5 +1535,6 @@ struct Event {
     kalmanOdometryDEPRECATED @65 :Legacy.KalmanOdometry;
     gpsLocationDEPRECATED @21 :GpsLocationData;
     uiLayoutStateDEPRECATED @57 :Legacy.UiLayoutState;
+    pandaStateDEPRECATED @12 :PandaState;
   }
 }

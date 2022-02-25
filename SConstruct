@@ -2,6 +2,7 @@ import os
 import platform
 import subprocess
 import sysconfig
+import numpy as np
 
 arch = subprocess.check_output(["uname", "-m"], encoding='utf8').rstrip()
 if platform.system() == "Darwin":
@@ -9,12 +10,18 @@ if platform.system() == "Darwin":
 
 cereal_dir = Dir('.')
 messaging_dir = Dir('./messaging')
+common = ''
 
 cpppath = [
   cereal_dir,
   messaging_dir,
   '/usr/lib/include',
+  '/opt/homebrew/include',
   sysconfig.get_paths()['include'],
+]
+
+libpath = [
+  '/opt/homebrew/lib',
 ]
 
 AddOption('--test',
@@ -38,6 +45,7 @@ env = Environment(
     "-O2",
     "-Wunused",
     "-Werror",
+    "-Wshadow",
   ] + ccflags_asan,
   LDFLAGS=ldflags_asan,
   LINKFLAGS=ldflags_asan,
@@ -45,15 +53,16 @@ env = Environment(
   CFLAGS="-std=gnu11",
   CXXFLAGS="-std=c++1z",
   CPPPATH=cpppath,
+  LIBPATH=libpath,
   CYTHONCFILESUFFIX=".cpp",
   tools=["default", "cython"]
 )
 
-QCOM_REPLAY = False
-Export('env', 'arch', 'QCOM_REPLAY')
+Export('env', 'arch', 'common')
 
 envCython = env.Clone(LIBS=[])
-envCython["CCFLAGS"] += ["-Wno-#warnings", "-Wno-deprecated-declarations"]
+envCython["CPPPATH"] += [np.get_include()]
+envCython["CCFLAGS"] += ["-Wno-#warnings", "-Wno-shadow", "-Wno-deprecated-declarations"]
 if arch == "Darwin":
   envCython["LINKFLAGS"] = ["-bundle", "-undefined", "dynamic_lookup"]
 elif arch == "aarch64":

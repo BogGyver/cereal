@@ -13,6 +13,7 @@ from cereal.services import service_list
 assert MultiplePublishersError
 assert MessagingError
 
+NO_TRAVERSAL_LIMIT = 2**64-1
 AVG_FREQ_HISTORY = 100
 SIMULATION = "SIMULATION" in os.environ
 
@@ -25,6 +26,9 @@ except ImportError:
   print("Warning, using python time.time() instead of faster sec_since_boot")
 
 context = Context()
+
+def log_from_bytes(dat: bytes) -> capnp.lib.capnp._DynamicStructReader:
+  return log.Event.from_bytes(dat, traversal_limit_in_words=NO_TRAVERSAL_LIMIT)
 
 def new_message(service: Optional[str] = None, size: Optional[int] = None) -> capnp.lib.capnp._DynamicStructBuilder:
   dat = log.Event.new_message()
@@ -83,7 +87,7 @@ def drain_sock(sock: SubSocket, wait_for_one: bool = False) -> List[capnp.lib.ca
     if dat is None:  # Timeout hit
       break
 
-    dat = log.Event.from_bytes(dat)
+    dat = log_from_bytes(dat)
     ret.append(dat)
 
   return ret
@@ -106,20 +110,20 @@ def recv_sock(sock: SubSocket, wait: bool = False) -> Union[None, capnp.lib.capn
     dat = rcv
 
   if dat is not None:
-    dat = log.Event.from_bytes(dat)
+    dat = log_from_bytes(dat)
 
   return dat
 
 def recv_one(sock: SubSocket) -> Union[None, capnp.lib.capnp._DynamicStructReader]:
   dat = sock.receive()
   if dat is not None:
-    dat = log.Event.from_bytes(dat)
+    dat = log_from_bytes(dat)
   return dat
 
 def recv_one_or_none(sock: SubSocket) -> Union[None, capnp.lib.capnp._DynamicStructReader]:
   dat = sock.receive(non_blocking=True)
   if dat is not None:
-    dat = log.Event.from_bytes(dat)
+    dat = log_from_bytes(dat)
   return dat
 
 def recv_one_retry(sock: SubSocket) -> capnp.lib.capnp._DynamicStructReader:
@@ -127,7 +131,7 @@ def recv_one_retry(sock: SubSocket) -> capnp.lib.capnp._DynamicStructReader:
   while True:
     dat = sock.receive()
     if dat is not None:
-      return log.Event.from_bytes(dat)
+      return log_from_bytes(dat)
 
 class SubMaster():
   def __init__(self, services: List[str], poll: Optional[List[str]] = None,
@@ -191,7 +195,7 @@ class SubMaster():
       self.updated[s] = True
 
       if self.rcv_time[s] > 1e-5 and self.freq[s] > 1e-5 and (s not in self.non_polled_services) \
-        and (s not in self.ignore_average_freq) and (not SIMULATION):
+        and (s not in self.ignore_average_freq):
         self.recv_dts[s].append(cur_time - self.rcv_time[s])
 
       self.rcv_time[s] = cur_time
@@ -200,18 +204,22 @@ class SubMaster():
       self.logMonoTime[s] = msg.logMonoTime
       self.valid[s] = msg.valid
 
-    for s in self.data:
-      # arbitrary small number to avoid float comparison. If freq is 0, we can skip the check
-      if self.freq[s] > 1e-5:
-        # alive if delay is within 10x the expected frequency
-        self.alive[s] = (cur_time - self.rcv_time[s]) < (10. / self.freq[s])
-
-        # alive if average frequency is higher than 90% of expected frequency
-        avg_dt = sum(self.recv_dts[s]) / AVG_FREQ_HISTORY
-        expected_dt = 1 / (self.freq[s] * 0.90)
-        self.alive[s] = self.alive[s] and (avg_dt < expected_dt)
-      else:
+      if SIMULATION:
         self.alive[s] = True
+
+    if not SIMULATION:
+      for s in self.data:
+        # arbitrary small number to avoid float comparison. If freq is 0, we can skip the check
+        if self.freq[s] > 1e-5:
+          # alive if delay is within 10x the expected frequency
+          self.alive[s] = (cur_time - self.rcv_time[s]) < (10. / self.freq[s])
+
+          # alive if average frequency is higher than 90% of expected frequency
+          avg_dt = sum(self.recv_dts[s]) / AVG_FREQ_HISTORY
+          expected_dt = 1 / (self.freq[s] * 0.90)
+          self.alive[s] = self.alive[s] and (avg_dt < expected_dt)
+        else:
+          self.alive[s] = True
 
   def all_alive(self, service_list=None) -> bool:
     if service_list is None:  # check all
